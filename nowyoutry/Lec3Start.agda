@@ -2,8 +2,8 @@
 
 module Lec3Start where
 
-open import Lec1Done
-open import Lec2Done
+open import Lec1Start
+open import Lec2Start
 
 postulate
   extensionality : {S : Set}{T : S -> Set}
