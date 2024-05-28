@@ -55,17 +55,17 @@ vHeadTailFact :  {X : Set}{n : Nat}(xs : Vec X (suc n)) ->
 vHeadTailFact (x ,- []) = refl (x ,- [])
 vHeadTailFact (x ,- xs) = refl (x ,- xs)
 
-list : Vec Nat 5
-list = (1 ,- 2 ,- 3 ,- 4 ,- 5 ,- [])
+list1 : Vec Nat 5
+list1 = (1 ,- 2 ,- 3 ,- 4 ,- 5 ,- [])
 
 head : Nat
-head = vHead list
+head = vHead list1
 
 tail : Vec Nat 4
-tail = vTail list
+tail = vTail list1
 
-exactness : (vHead list ,- vTail list) == list
-exactness = vHeadTailFact list
+exactness : (vHead list1 ,- vTail list1) == list1
+exactness = vHeadTailFact list1
 
 --??--------------------------------------------------------------------------
 
@@ -97,8 +97,8 @@ infixr 4 _+V_
 list2 : Vec Nat 3
 list2 = (6 ,- 7 ,- 8 ,- [])
 
-concat : Vec Nat (5 +N 3)
-concat = list +V list2
+lconcat : Vec Nat (5 +N 3)
+lconcat = list1 +V list2
 
 vChop : {X : Set}(m : Nat){n : Nat} -> Vec X (m +N n) -> Vec X m * Vec X n
 vChop zero xs = [] , xs
@@ -106,15 +106,15 @@ vChop (suc m) (x ,- xs) with vChop m xs
 ... | fch , sch = (x ,- fch) , sch
 
 chopped : Vec Nat 5 * Vec Nat 3
-chopped = vChop 5 concat
+chopped = vChop 5 lconcat
 
 vChopAppendFact : {X : Set}{m n : Nat}(xs : Vec X m)(ys : Vec X n) ->
                   vChop m (xs +V ys) == (xs , ys)
 vChopAppendFact [] ys = refl ([] , ys)
 vChopAppendFact (x ,- xs) ys rewrite vChopAppendFact xs ys = refl ((x ,- xs) , ys)
 
-choppedFact : vChop 5 (list +V list2) == (list , list2)
-choppedFact = vChopAppendFact list list2
+choppedFact : vChop 5 (list1 +V list2) == (list1 , list2)
+choppedFact = vChopAppendFact list1 list2
 
 --??--------------------------------------------------------------------------
 

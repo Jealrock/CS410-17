@@ -42,11 +42,11 @@ OPE = record
   { Obj          = Nat    -- ...has numbers as objects...
   ; _~>_         = _<=_   -- ...and "thinnings" as arrows.
                           -- Now, assemble the rest of the components.
-  ; id~>         = {!!}
-  ; _>~>_        = {!!}
-  ; law-id~>>~>  = {!!}
-  ; law->~>id~>  = {!!}
-  ; law->~>>~>   = {!!}
+  ; id~>         = oi
+  ; _>~>_        = _o>>_
+  ; law-id~>>~>  = idThen-o>>
+  ; law->~>id~>  = idAfter-o>>
+  ; law->~>>~>   = assoc-o>>
   }
 
 VEC : Nat -> SET => SET                -- Vectors of length n...
@@ -54,8 +54,8 @@ VEC n = record
   { F-Obj       = \ X -> Vec X n       -- ...give a functor from SET to SET...
   ; F-map       = \ f xs -> vMap f xs  -- ...doing vMap to arrows.
                                        -- Now prove the laws.
-  ; F-map-id~>  = extensionality \ xs -> {!!}
-  ; F-map->~>   = \ f g -> extensionality \ xs -> {!!}
+  ; F-map-id~>  = extensionality \ xs -> vMapIdFact refl xs
+  ; F-map->~>   = \ f g -> extensionality \ { xs -> sym (vMapCpFact (\x -> refl (g (f x))) xs) }
   }
 
 Op : Category -> Category             -- Every category has an opposite...
@@ -63,19 +63,19 @@ Op C = record
   { Obj          = Obj                -- ...with the same objects, but...  
   ; _~>_         = \ S T -> T ~> S    -- ...arrows that go backwards!
                                       -- Now, find the rest!
-  ; id~>         = {!!}
-  ; _>~>_        = {!!}
-  ; law-id~>>~>  = {!!}
-  ; law->~>id~>  = {!!}
-  ; law->~>>~>   = {!!}
+  ; id~>         = id~>
+  ; _>~>_        = \ S T -> T >~> S
+  ; law-id~>>~>  = law->~>id~>
+  ; law->~>id~>  = law-id~>>~>
+  ; law->~>>~>   = \ f g h -> sym (law->~>>~> h g f)
   } where open Category C
 
 CHOOSE : Set -> OPE => Op SET    -- Show that thinnings from n to m...
 CHOOSE X = record                -- ...act by selection...
   { F-Obj       = Vec X          -- ...to cut vectors down from m to n.
-  ; F-map       = {!!}
-  ; F-map-id~>  = extensionality {!!}
-  ; F-map->~>   = \ f g -> extensionality {!!}
+  ; F-map       = _<?=_
+  ; F-map-id~>  = extensionality id-<?=
+  ; F-map->~>   = \ f g -> extensionality (cp-<?= f g)
   }
 
 --??--------------------------------------------------------------------------
@@ -104,17 +104,25 @@ infixr 4 _+L_
 
 --??--2.2-(3)-----------------------------------------------------------------
 
++L-[] : {X : Set} (x : List X) → (x +L []) == x
++L-[] [] = refl []
++L-[] (x ,- xs) rewrite +L-[] xs = refl (x ,- xs)
+
++L-assoc : {X : Set} (f g h : List X) -> ((f +L g) +L h) == (f +L g +L h)
++L-assoc [] g h = refl (g +L h)
++L-assoc (f ,- fs) g h rewrite +L-assoc fs g h = refl (f ,- fs +L g +L h)
+
 LIST-MONOID : Set -> Category
 LIST-MONOID X =            -- Show that _+L_ is the operation of a monoid,...
   record
   { Obj          = One     -- ... i.e., a category with one object.
-  ; _~>_         = {!!}
-  ; id~>         = {!!}
-  ; _>~>_        = {!!}
-  ; law-id~>>~>  = {!!}
-  ; law->~>id~>  = {!!}
-  ; law->~>>~>   = {!!}
-  } where
+  ; _~>_         = \ <> <> -> List X
+  ; id~>         = []
+  ; _>~>_        = _+L_ {X}
+  ; law-id~>>~>  = refl
+  ; law->~>id~>  = +L-[]
+  ; law->~>>~>   = +L-assoc
+  }
   -- useful helper proofs (lemmas) go here
 
 --??--------------------------------------------------------------------------
@@ -126,16 +134,25 @@ LIST-MONOID X =            -- Show that _+L_ is the operation of a monoid,...
 --??--2.3-(3)-----------------------------------------------------------------
 
 list : {X Y : Set} -> (X -> Y) -> List X -> List Y
-list f xs = {!!}
+list f [] = []
+list f (x ,- xs) = (f x ,- list f xs)
 
 LIST : SET => SET
 LIST = record
   { F-Obj       = List
   ; F-map       = list
-  ; F-map-id~>  = extensionality {!!}
-  ; F-map->~>   = \ f g -> extensionality {!!}
+  ; F-map-id~>  = extensionality listIdFact
+  ; F-map->~>   = \ f g -> extensionality (listCpFact f g)
   } where
   -- useful helper proofs (lemmas) go here
+  listIdFact : {X : Set} (x : List X) → list id x == id x
+  listIdFact [] = refl []
+  listIdFact (x ,- xs) rewrite listIdFact xs = refl (x ,- xs)
+
+  listCpFact : {R S T : Set} (f : R -> S)(g : S -> T)(x : List R) ->
+               list (f >> g) x == (list f >> list g) x
+  listCpFact f g [] = refl []
+  listCpFact f g (x ,- xs) rewrite listCpFact f g xs = refl (g (f x) ,- list g (list f xs))
 
 --??--------------------------------------------------------------------------
 
@@ -148,10 +165,15 @@ LIST+L : {X Y : Set}(f : X -> Y) -> LIST-MONOID X => LIST-MONOID Y
 LIST+L {X}{Y} f = record
   { F-Obj       = id
   ; F-map       = list f -- this yellow will go once LIST-MONOID has arrows!
-  ; F-map-id~>  = {!!}
-  ; F-map->~>   = {!!}
+  ; F-map-id~>  = refl []
+  ; F-map->~>   = list+LFact f
   } where
   -- useful helper proofs (lemmas) go here
+  list+LFact : {X Y : Set} (f : X → Y) (x y : List X) ->
+              list f (x +L y) == (list f x +L list f y)
+  list+LFact f [] y = refl (list f y)
+  list+LFact f (x ,- xs) y rewrite list+LFact f xs y = refl (f x ,- list f xs +L list f y)
+
 
 
 --??--------------------------------------------------------------------------
@@ -164,7 +186,7 @@ LIST+L {X}{Y} f = record
 SINGLE : ID ~~> LIST
 SINGLE = record
   { xf          = \ x -> x ,- []      -- turn a value into a singleton list
-  ; naturality  = \ f -> {!!}
+  ; naturality  = \ f -> extensionality \ x -> refl (f x ,- [])
   }
 
 --??--------------------------------------------------------------------------
@@ -182,14 +204,21 @@ SINGLE = record
 --??--2.6-(3)-----------------------------------------------------------------
 
 concat : {X : Set} -> List (List X) -> List X
-concat xss = {!!}
+concat [] = []
+concat (xs ,- xss) = xs +L (concat xss)
 
 CONCAT : (LIST >=> LIST) ~~> LIST
 CONCAT = record
   { xf          = concat
-  ; naturality  = {!!}
+  ; naturality  = \ f -> extensionality (cpFact f)
   } where
+
   -- useful helper proofs (lemmas) go here
+  cpFact : {X Y : Set}(f : X -> Y)(xss : (List >> List) X) ->
+           ((list >> list) f >> concat) xss == (concat >> list f) xss
+  cpFact f [] = refl []
+  cpFact f (xs ,- xss) rewrite cpFact f xss = sym (_=>_.F-map->~> (LIST+L f) xs (concat xss))
+
 
 --??--------------------------------------------------------------------------
 
@@ -205,11 +234,32 @@ module LIST-MONAD where
   ListMonad = record
     { unit      = SINGLE
     ; mult      = CONCAT
-    ; unitMult  = {!!}
-    ; multUnit  = {!!}
-    ; multMult  = {!!}
+    ; unitMult  = extensionality unitMultHelp
+    ; multUnit  = extensionality multUnitHelp
+    ; multMult  = extensionality multMultHelp
     } where
     -- useful helper proofs (lemmas) go here
+    open Category SET
+    open _~~>_
+
+    unitMultHelp : {X : Set} (xs : id (List X)) -> (xf SINGLE >~> concat) xs == id~> xs
+    unitMultHelp [] = refl []
+    unitMultHelp (x ,- xs) rewrite unitMultHelp xs = refl (x ,- xs)
+
+    multUnitHelp : {X : Set} (xs : List (id X)) -> (list (xf SINGLE) >~> concat) xs == id~> xs
+    multUnitHelp [] = refl []
+    multUnitHelp (x ,- xs) rewrite multUnitHelp xs = refl (x ,- xs)
+
+    concat+LFact : {X : Set}(xss yss : List (List X)) ->
+                   concat (xss +L yss) == (concat xss +L concat yss)
+    concat+LFact [] yss = refl (concat yss)
+    concat+LFact (xs ,- xss) yss rewrite concat+LFact xss yss = sym (+L-assoc xs (concat xss) (concat yss))
+
+    multMultHelp : {X : Set} (xsss : (List >> List) (List X)) ->
+                   (concat >~> concat) xsss == (list concat >~> concat) xsss
+    multMultHelp [] = refl []
+    multMultHelp (xss ,- xsss) rewrite concat+LFact xss (concat xsss) | multMultHelp xsss =
+      refl (concat xss +L concat (list concat xsss))
 
 -- open LIST-MONAD
 
@@ -290,7 +340,7 @@ copy zero = []
 copy (suc n) = <> ,- copy n
 
 VecCopy : Set -> Nat -> Set
-VecCopy X n = All (\ _ -> X) (copy n)
+VecCopy X n = All (λ _ → X) (copy n)
 
 -- Now, your turn...
 
@@ -301,16 +351,28 @@ VecCopy X n = All (\ _ -> X) (copy n)
 
 all : {X : Set}{S T : X -> Set} ->
       [ S -:> T ] -> [ All S -:> All T ]
-all f xs ss = {!!}
+all f [] <> = <>
+all f (x ,- xs) (s , ss) = f x s , all f xs ss
 
 ALL : (X : Set) -> (X ->SET) => (List X ->SET)
 ALL X = record
   { F-Obj      = All
   ; F-map      = all
-  ; F-map-id~> = {!!}
-  ; F-map->~>  = {!!}
+  ; F-map-id~> = extensionality \ xs -> extensionality (allIdFact xs)
+  ; F-map->~>  = \ f g -> extensionality \ xs -> extensionality (allCpFact f g xs)
   } where
   -- useful helper facts go here
+  allIdFact : {T : X -> Set} (xs : List X)(ss : All T xs) -> all (\ i → id) xs ss == id ss
+  allIdFact [] <> = refl <>
+  allIdFact (x ,- xs) (s , ss) rewrite allIdFact xs ss = refl (s , ss)
+
+  allCpFact : { R S T : X -> Set }
+              (f : [ R -:> S ])(g : [ S -:> T ])(xs : List X)(ss : All R xs) ->
+              all (λ i → f i >> g i) xs ss == (all f xs >> all g xs) ss
+  allCpFact f g [] ss = refl <>
+  allCpFact f g (x ,- xs) (s , ss) rewrite allCpFact f g xs ss =
+    refl (g x (f x s) , all g xs (all f xs ss))
+
 
 --??--------------------------------------------------------------------------
 
@@ -402,12 +464,12 @@ footprints = (4 , 6 , refl 10) 8>< strVec "foot"
 CUTTING : {I O : Set}(C : I |> O) -> (I ->SET) => (O ->SET)
 CUTTING {I}{O} C = record
   { F-Obj = Cutting C
-  ; F-map = {!!}
+  ; F-map = \ { f o (c 8>< ps) -> c 8>< F-map f (inners c) ps }
   ; F-map-id~> = extensionality \ o -> extensionality \ { (c 8>< ps) ->
-     {!!} }
+      refl (_8><_ c) =$= (F-map-id~> =$ (inners c) =$ ps) } -- =$ reverse extensionality
   ; F-map->~> = \ f g ->
      extensionality \ o -> extensionality \ { (c 8>< ps) ->
-     {!!} } 
+     refl (_8><_ c) =$= (F-map->~> f g =$ (inners c) =$ ps) }
   } where
   open _|>_ C
   open _=>_ (ALL I)
@@ -509,9 +571,14 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
     allInteriorFoldLaw : (pq : [ P -:> Q ])(qalg : Algebra (CUTTING C) Q) ->
       allInteriorFold pq qalg == all (interiorFold pq qalg)
     allInteriorFoldLaw pq qalg = extensionality \ is -> extensionality \ ps ->
-      {!!}
+      help is ps
       where
       -- helper lemmas go here
+      help : (is : List I)(ps : All (Interior C P) is) ->
+             allInteriorFold pq qalg is ps == all (interiorFold pq qalg) is ps
+      help [] ps = refl <>
+      help (i ,- is) (p , ps) rewrite help is ps =
+        refl (interiorFold pq qalg i p , all (interiorFold pq qalg) is ps)
 
 --??--------------------------------------------------------------------------
 
@@ -529,7 +596,20 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
         qalg i (c 8>< all f (inners c) ps) == f i < c 8>< ps >) ->
       (i : I)(pi : Interior C P i) -> interiorFold pq qalg i pi == f i pi
 
-    interiorFoldLemma pq qalg f base step i pi = {!!}
+    interiorFoldLemma pq qalg f base step i (tile p) = base i p
+    interiorFoldLemma pq qalg f base step i < c 8>< ps > rewrite allInteriorFoldLaw pq qalg =
+      qalg i (c 8>< all (interiorFold pq qalg) (inners c) ps)
+      =[ qalg i (c 8>< all (interiorFold pq qalg) (inners c) ps)
+      =< refl (\ x -> qalg i (c 8>< x)) =$= sym (help (inners c) ps)
+      ]= step i c ps
+      >= f i < c 8>< ps >
+      [QED]
+      where
+        help : (is : List I)(ps : All (Interior C P) is)
+             -> all (interiorFold pq qalg) is ps == all f is ps
+        help [] <> = refl <>
+        help (i ,- is) (p , ps) rewrite help is ps | interiorFoldLemma pq qalg f base step i p
+          = refl (f i p , all f is ps)
 
 --??--------------------------------------------------------------------------
 
@@ -600,7 +680,7 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
 
   interior : {X Y : I -> Set} ->
              [ X -:> Y ] -> [ Interior C X -:> Interior C Y ]
-  interior f = {!!}
+  interior f = interiorBind (f >~> \ i → tile)
 
   -- using interiorBindFusion, prove the following law for "fold after map"
 
@@ -609,7 +689,7 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
     (interior pq >~> interiorFold qr ralg) == interiorFold (pq >~> qr) ralg
   interiorFoldFusion pq qr ralg =
     interior pq >~> interiorFold qr ralg
-      =[ {!!} >=
+      =[ interiorBindFusion (pq >~> tile') qr ralg >=
     interiorFold (pq >~> qr) ralg [QED]
     where open _=>_ (ALL I)
 
@@ -620,8 +700,10 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
   INTERIOR = record
     { F-Obj      = Interior C
     ; F-map      = interior
-    ; F-map-id~> = {!!}
-    ; F-map->~>  = {!!}
+    ; F-map-id~> = interiorFoldLaw tile' cut' (\ i -> id)
+                                   (\ i p -> refl (tile p))
+                                   \ i c ps -> refl (\ x -> < c 8>< x >) =$= (F-map-id~> =$ (inners c) =$ ps)
+    ; F-map->~>  = \ f g -> sym $ interiorFoldFusion f (g >~> tile') cut'
     } where open _=>_ (ALL I)
 
 --??--------------------------------------------------------------------------
@@ -636,24 +718,39 @@ module INTERIOR {I : Set}{C : I |> I} where  -- fix some C...
 
   WRAP : ID ~~> INTERIOR
   WRAP = record
-    { xf         = {!!}
-    ; naturality = {!!}
+    { xf         = tile'
+    ; naturality = \ f -> refl _
     }
 
   -- use interiorBind to define the following
   FLATTEN : (INTERIOR >=> INTERIOR) ~~> INTERIOR
   FLATTEN = record
-    { xf         = {!!}
-    ; naturality = {!!}
+    { xf         = interiorBind \ _ -> id
+    ; naturality = \ f -> (\ i -> (interior >> interior) f i >> interiorBind (\ z -> id) i)
+                          =[  interiorBindFusion (interiorFold (f >~> tile') cut' >~> tile') (\ _ -> id) cut' >=
+                          interiorFold ((\ z -> id) >~> \ i -> interior f i) cut'
+                          =<  interiorBindFusion (\ _ -> id) (f >~> tile') cut' ]=
+                          (\ i -> interiorBind (\ z -> id) i >> interior f i) [QED]
+
     }
 
   INTERIOR-Monad : Monad
   INTERIOR-Monad = record
     { unit = WRAP
     ; mult = FLATTEN
-    ; unitMult = {!!}
-    ; multUnit = {!!}
-    ; multMult = {!!}
+    ; unitMult = refl _
+    ; multUnit =
+      ((I ->SET) Category.>~> interior tile') (interiorBind (\ z -> id))
+      =[ interiorFoldFusion tile' (\ z -> id) cut' >=
+      interior (\ _ -> id)
+      =[ F-map-id~> >=
+      (\ _ -> id) [QED]
+    ; multMult =
+      ((I ->SET) Category.>~> xf FLATTEN) (xf FLATTEN)
+      =[ interiorBindFusion (\ _ -> id) (\ _ -> id) cut' >=
+      interiorFold (interiorBind (λ z → id) >~> (λ z → id)) cut'
+      =<  interiorFoldFusion (interiorBind \ _ -> id) (\ _ -> id) cut' ]=
+      ((I ->SET) Category.>~> F-map (xf FLATTEN)) (xf FLATTEN) [QED]
     } where
     open _=>_ INTERIOR
 
@@ -668,7 +765,7 @@ open INTERIORFOLD
 --??--2.14-(2)----------------------------------------------------------------
 
 NatCutVecAlg : {X : Set} -> Algebra (CUTTING NatCut) (Vec X)
-NatCutVecAlg n xsc = {!!}
+NatCutVecAlg n (n1 , n2 , neq 8>< p1 , p2 , <>) rewrite sym neq = p1 +V p2
 
 --??--------------------------------------------------------------------------
 
@@ -694,7 +791,8 @@ module CHOICE where
 
   _+C_ : {I J : Set} ->  I |> I ->  J |> J  ->  (I * J) |> (I * J)
   Cuts   (P +C Q) (i , j) = Cuts P i + Cuts Q j
-  inners (P +C Q) = {!!}
+  inners (P +C Q) {i , j} (inl c) = list (_, j) (inners P c)
+  inners (P +C Q) {i , j} (inr c) = list (i ,_) (inners Q c)
 
 --??--------------------------------------------------------------------------
 
@@ -744,7 +842,7 @@ rectangle = < inr (4 , 2 , refl _)
 
 vecAll : {I : Set}{P : I -> Set}{is : List I}{n : Nat} ->
          All (\ i -> Vec (P i) n) is -> Vec (All P is) n
-vecAll {is = is} pss = {!!}
+vecAll {is = is} pss = vTabulate \ f -> all (\ i xs -> vProject xs f) is pss
 
 -- Given vecAll, show that algebra for any cutting can be lifted
 -- to an algebra on vectors.
@@ -752,15 +850,15 @@ vecAll {is = is} pss = {!!}
 VecLiftAlg : {I : Set}(C : I |> I){X : I -> Set}
              (alg : Algebra (CUTTING C) X){n : Nat} ->
              Algebra (CUTTING C) (\ i -> Vec (X i) n)
-VecLiftAlg C alg i (c 8>< pss) = {!!}
+VecLiftAlg C alg i (c 8>< pss) = vMap (\ x -> alg i (c 8>< x)) (vecAll pss)
 
 -- Now show that you can build an algebra for matrices
 -- which handles cuts in either dimension,
 -- combining them either horizontally or vertically!
 
 NatCut2DMatAlg : {X : Set} -> Algebra (CUTTING NatCut2D) (Matrix X)
-NatCut2DMatAlg _ (inl c 8>< ms) = {!!}
-NatCut2DMatAlg _ (inr c 8>< ms) = {!!}
+NatCut2DMatAlg _ (inl c 8>< ms) = VecLiftAlg NatCut NatCutVecAlg _ (c 8>< ms)
+NatCut2DMatAlg _ (inr c 8>< ms) = NatCutVecAlg _ (c 8>< ms)
 
 --??--------------------------------------------------------------------------
 
